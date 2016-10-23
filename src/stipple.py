@@ -16,10 +16,10 @@ probabilistic programming functions. A stipple model is defined by the following
     * Observe: adds data to a variable
     * Infer: finds the posterior or an approximation to the posterior of the model specified
 """
-
 import numpy as np
 import util.adlib as adlib
 import util.hmc as hmc
+import util.distrib as distrib
 
 
 class Stipple(object):
@@ -56,7 +56,7 @@ class Stipple(object):
         :param distribution: string with the distribution type
         :param name: string with the symbol to be attributed to the distribution
         :param parameters: dictionary with the parameters of the distribution
-        :return: error code if adding the node was unsuccessfull
+        :return: error code if adding the node was unsuccessful
         """
 
         # INPUT CHECKING
@@ -70,47 +70,8 @@ class Stipple(object):
 
         # PARSING
         # Switch-case for available distributions in the language
-        if distribution is 'dirac':
-            new_node = {
-                'distr': 'Constant',
-                'param': [None],
-                'data': None
-            }
-        elif distribution is 'normal':
-            new_node = {
-                'distr': 'LogLikeGaussian',
-                'param': [parameters['mu'], parameters['s2']],
-                'data': None
-            }
-        elif distribution is 'exponential':
-            new_node = {
-                'distr': 'LogLikeExponential',
-                'param': [parameters['lambda']],
-                'data': None
-            }
-        elif distribution is 'gamma':
-            new_node = {
-                'distr': 'LogLikeGamma',
-                'param': [parameters['alpha'], parameters['beta']],
-                'data': None
-            }
-        elif distribution is 'inverse_gamma':
-            new_node = {
-                'distr': 'LogLikeInvGamma',
-                'param': [parameters['alpha'], parameters['beta']],
-                'data': None
-            }
-        elif distribution is 'beta':
-            new_node = {
-                'distr': 'LogLikeBeta',
-                'param': [parameters['alpha'], parameters['beta']],
-                'data': None
-            }
-        else:
-            raise NameError('Unrecognized distribution: ' + distribution)
-
         self._var_list.append(name)
-        self._namespace[name] = new_node
+        self._namespace[name] = distrib.CreateNode(distribution, parameters)
 
     def disregard(self, name):
         """

@@ -30,6 +30,14 @@ class TestADlib(TestCase):
         result = parser.eval()
         np.testing.assert_allclose(np.sin(13.5), result)
 
+    def test_expression_eval_4(self):
+        expression = 'sin(dot(x, y))'
+        x = np.array([1, 2])
+        y = np.array([3, 4])
+        parser = ADLib(expression, {'x': x, 'y': y})
+        result = parser.eval()
+        np.testing.assert_allclose(np.sin(x.T.dot(y)), result)
+
     def test_expression_grad_1(self):
         expression = 'mult(4.5, add(x, 2))'
         x = 2
@@ -78,38 +86,63 @@ class TestADlib(TestCase):
         ground_truth = np.cos(4.5 * (x + 2)) * 4.5 * x + np.sin(4.5 * (x + 2))
         np.testing.assert_allclose(ground_truth, result[1]['x'])
 
+    def test_expression_grad_7(self):
+        expression = 'sin( mult( 4.5, dot(x, y) ) )'
+        x = np.array([1, 2, 3])
+        y = np.array([4, 5, 6])
+        parser = ADLib(expression, {'x': x, 'y': y})
+        result = parser.eval(get_gradients=True)
+        ground_truth = np.cos(4.5 * x.dot(y)) * 4.5 * y
+        np.testing.assert_allclose(ground_truth, result[1]['x'])
+
 
 class TestIdentity(TestCase):
     def test_func(self):
         xin = 5
-        a = Identity(xin)
-        np.testing.assert_almost_equal(xin, a.func(a.arg_list))
+        f = Identity(xin)
+        np.testing.assert_almost_equal(xin, f.func(f.arg_list))
 
     def test_grad(self):
         xin = 5
-        a = Identity(xin)
-        np.testing.assert_almost_equal(1., a.grad(a.arg_list))
+        f = Identity(xin)
+        np.testing.assert_almost_equal(1., f.grad(f.arg_list))
 
 
 class TestConstant(TestCase):
     def test_func(self):
         xin = 5
-        a = Constant(xin)
-        np.testing.assert_almost_equal(xin, a.func(a.arg_list))
+        f = Constant(xin)
+        np.testing.assert_almost_equal(xin, f.func(f.arg_list))
 
     def test_grad(self):
         xin = 5
-        a = Constant(xin)
-        np.testing.assert_almost_equal(0., a.grad(a.arg_list))
+        f = Constant(xin)
+        np.testing.assert_almost_equal(0., f.grad(f.arg_list))
 
 
 class TestAdd(TestCase):
     def test_func(self):
-        a = Add()
-        a.arg_list = [5, 10]
-        np.testing.assert_almost_equal(15, a.func(a.arg_list))
+        f = Add()
+        f.arg_list = [5, 10]
+        np.testing.assert_almost_equal(15, f.func(f.arg_list))
 
     def test_grad(self):
-        a = Add()
-        a.arg_list = [5, 10]
-        np.testing.assert_almost_equal([1, 1], a.grad(a.arg_list))
+        f = Add()
+        f.arg_list = [5, 10]
+        np.testing.assert_almost_equal([1, 1], f.grad(f.arg_list))
+
+
+class TestDot(TestCase):
+    def test_func(self):
+        f = Dot()
+        a = np.array([1, 2])
+        b = np.array([3, 4])
+        f.arg_list = [a, b]
+        np.testing.assert_almost_equal(a.dot(b), f.func(f.arg_list))
+
+    def test_grad(self):
+        f = Dot()
+        a = np.array([1, 2])
+        b = np.array([3, 4])
+        f.arg_list = [a, b]
+        np.testing.assert_almost_equal([b, a], f.grad(f.arg_list))

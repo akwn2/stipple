@@ -4,6 +4,7 @@ from src.stipple import *
 
 class TestStipple(TestCase):
     def test__parse_hmc_energy(self):
+        # Parsing test without substituting for inputs and outputs
         model = Stipple()
         model.input('x', [0.9, 0.2])
         model.assume('dirac', 'c', {'lag': 0.1})

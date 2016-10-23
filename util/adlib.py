@@ -6,6 +6,7 @@ This file contains the Automatic Differentiation functions to be used in Stipple
 
 Here we use the Forward Accumulation Method
 """
+from funcs import *
 import numpy as np
 import scipy.special as sps
 
@@ -21,7 +22,7 @@ class ADLib:
 
         self.symbol_dict = symbol_dict
         self.symbol_list = list(self.symbol_dict.keys())
-        self.op_list = ['add', 'sub', 'mult', 'div', 'pow', 'sin', 'cos',
+        self.op_list = ['add', 'sub', 'mult', 'div', 'pow', 'sin', 'cos', 'dot',
                         'Identity' 'LogLikGaussian', 'LogLikExponential', 'LogLikGamma', 'LogLikInvGamma', 'LogLikBeta']
 
         # Check if the expression is valid
@@ -413,14 +414,3 @@ class LogLikeBeta(FunctionNode):
         self.grad = lambda x, a, b: [(a - 1.) / x - (b - 1.) / (1. - x),
                                      np.log(x) - sps.polygamma(0, a) + sps.polygamma(0, a + b),
                                      np.log(1. - x) - sps.polygamma(0, b) + sps.polygamma(0, a + b)]
-
-
-# Utility functions for parsin
-def str2num(s):
-    """
-    convert string to number
-    """
-    try:
-        return int(s)
-    except ValueError:
-        return float(s)
