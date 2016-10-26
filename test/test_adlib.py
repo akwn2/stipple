@@ -5,41 +5,51 @@ import numpy as np
 
 class TestADlib(TestCase):
     def test_expression_checker_valid(self):
-        expression = 'mult(add(x, 2), 4.5)'
+        expression = 'Mult(Add(x, 2), 4.5)'
         ADLib(expression, {'x': 1})
 
     def test_expression_checker_error(self):
-        expression = 'mult(add(x, 2), # 4.5)'
+        expression = 'Mult(Add(x, 2), # 4.5)'
         ADLib(expression, {'x': 1})
 
     def test_expression_eval_1(self):
-        expression = 'mult(add(x, 2), 4.5)'
+        expression = 'Mult(Add(x, 2), 4.5)'
         parser = ADLib(expression, {'x': 1})
         result = parser.eval()
         np.testing.assert_allclose(13.5, result)
 
     def test_expression_eval_2(self):
-        expression = 'mult(4.5, add(x, 2))'
+        expression = 'Mult(4.5, Add(x, 2))'
         parser = ADLib(expression, {'x': 1})
         result = parser.eval()
         np.testing.assert_allclose(13.5, result)
 
     def test_expression_eval_3(self):
-        expression = 'sin(mult(4.5, add(x, 2)))'
+        expression = 'Sin(Mult(4.5, Add(x, 2)))'
         parser = ADLib(expression, {'x': 1})
         result = parser.eval()
         np.testing.assert_allclose(np.sin(13.5), result)
 
     def test_expression_eval_4(self):
-        expression = 'sin(dot(x, y))'
+        expression = 'Sin(Dot(x, y))'
         x = np.array([1, 2])
         y = np.array([3, 4])
         parser = ADLib(expression, {'x': x, 'y': y})
         result = parser.eval()
         np.testing.assert_allclose(np.sin(x.T.dot(y)), result)
 
+    def test_expression_eval_5(self):
+        expression = 'Add(LogLikeGaussian(x, 0.1, 0.5), LogLikeGaussian(y, 0.4, 0.9))'
+        x = np.array([1])
+        y = np.array([3])
+        parser = ADLib(expression, {'x': x, 'y': y})
+        result = parser.eval()
+        np.testing.assert_allclose(-0.5 * np.log(2. * np.pi * 0.5) - 0.5 * (x - 0.1) ** 2 / 0.5
+                                   - 0.5 * np.log(2. * np.pi * 0.9) - 0.5 * (y - 0.4) ** 2 / 0.9,
+                                   result)
+
     def test_expression_grad_1(self):
-        expression = 'mult(4.5, add(x, 2))'
+        expression = 'Mult(4.5, Add(x, 2))'
         x = 2
         parser = ADLib(expression, {'x': x})
         result = parser.eval(get_gradients=True)
@@ -47,7 +57,7 @@ class TestADlib(TestCase):
         np.testing.assert_allclose(ground_truth, result[1]['x'])
 
     def test_expression_grad_2(self):
-        expression = 'sin(add(x, 2))'
+        expression = 'Sin(Add(x, 2))'
         x = 2
         parser = ADLib(expression, {'x': x})
         result = parser.eval(get_gradients=True)
@@ -55,7 +65,7 @@ class TestADlib(TestCase):
         np.testing.assert_allclose(ground_truth, result[1]['x'])
 
     def test_expression_grad_3(self):
-        expression = 'add( div( mult( 4.5, add(x, 2) ), 3), 3)'
+        expression = 'Add( Div( Mult( 4.5, Add(x, 2) ), 3), 3)'
         x = 2
         parser = ADLib(expression, {'x': x})
         result = parser.eval(get_gradients=True)
@@ -63,7 +73,7 @@ class TestADlib(TestCase):
         np.testing.assert_allclose(ground_truth, result[1]['x'])
 
     def test_expression_grad_4(self):
-        expression = 'sin( mult( 4.5, add(x, 2) ) )'
+        expression = 'Sin( Mult( 4.5, Add(x, 2) ) )'
         x = 2
         parser = ADLib(expression, {'x': x})
         result = parser.eval(get_gradients=True)
@@ -71,7 +81,7 @@ class TestADlib(TestCase):
         np.testing.assert_allclose(ground_truth, result[1]['x'])
 
     def test_expression_grad_5(self):
-        expression = 'add(sin( mult( 4.5, add(x, 2) ) ), x)'
+        expression = 'Add(Sin( Mult( 4.5, Add(x, 2) ) ), x)'
         x = 2
         parser = ADLib(expression, {'x': x})
         result = parser.eval(get_gradients=True)
@@ -79,7 +89,7 @@ class TestADlib(TestCase):
         np.testing.assert_allclose(ground_truth, result[1]['x'])
 
     def test_expression_grad_6(self):
-        expression = 'mult(sin( mult( 4.5, add(x, 2) ) ), x)'
+        expression = 'Mult(Sin( Mult( 4.5, Add(x, 2) ) ), x)'
         x = 2
         parser = ADLib(expression, {'x': x})
         result = parser.eval(get_gradients=True)
@@ -87,13 +97,32 @@ class TestADlib(TestCase):
         np.testing.assert_allclose(ground_truth, result[1]['x'])
 
     def test_expression_grad_7(self):
-        expression = 'sin( mult( 4.5, dot(x, y) ) )'
+        expression = 'Sin( Mult( 4.5, Dot(x, y) ) )'
         x = np.array([1, 2, 3])
         y = np.array([4, 5, 6])
         parser = ADLib(expression, {'x': x, 'y': y})
         result = parser.eval(get_gradients=True)
         ground_truth = np.cos(4.5 * x.dot(y)) * 4.5 * y
         np.testing.assert_allclose(ground_truth, result[1]['x'])
+
+    def test_expression_grad_8(self):
+        expression = 'Sin( Mult( 4.5, Dot(x, y) ) )'
+        x = np.array([1, 2, 3])
+        y = np.array([4, 5, 6])
+
+        var_order = ['y', 'x']
+        parser = ADLib(expression, {'x': x, 'y': y}, var_order)
+        val, grad_dict = parser.eval(get_gradients=True)
+
+        grad = list()
+        for ii in xrange(0, len(var_order)):
+            grad.append(grad_dict[var_order[ii]])
+
+        grad = np.asarray(grad)
+        gt = np.array([np.cos(4.5 * x.dot(y)) * 4.5 * x,
+                       np.cos(4.5 * x.dot(y)) * 4.5 * y])
+
+        np.testing.assert_allclose(gt, grad)
 
 
 class TestIdentity(TestCase):

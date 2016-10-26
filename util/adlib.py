@@ -10,9 +10,13 @@ from funcs import *
 import numpy as np
 import scipy.special as sps
 
+op_list = ['add', 'sub', 'mult', 'div', 'pow', 'sin', 'cos', 'dot',
+           'Identity' 'LogLikGaussian', 'LogLikExponential', 'LogLikGamma',
+           'LogLikInvGamma', 'LogLikBeta']
+
 
 class ADLib:
-    def __init__(self, expression, symbol_dict):
+    def __init__(self, expression, symbol_dict, grad_vars=None):
         """
         :param expression: expression to be parsed
         :param symbol_dict: list of symbols used for variables
@@ -22,11 +26,17 @@ class ADLib:
 
         self.symbol_dict = symbol_dict
         self.symbol_list = list(self.symbol_dict.keys())
-        self.op_list = ['add', 'sub', 'mult', 'div', 'pow', 'sin', 'cos', 'dot',
-                        'Identity' 'LogLikGaussian', 'LogLikExponential', 'LogLikGamma', 'LogLikInvGamma', 'LogLikBeta']
+        if grad_vars:
+            self.grad_vars = grad_vars
+        else:
+            self.grad_vars = self.symbol_list
 
-        # Check if the expression is valid
+        self.op_list = ['Add', 'Sub', 'Mult', 'Div', 'Pow', 'Sin', 'Cos', 'Dot', 'Identity',
+                        'LogLikeGaussian', 'LogLikeExponential', 'LogLikeGamma', 'LogLikeInvGamma', 'LogLikeBeta']
+
+        # Check if the expression is valid, then tokenize it
         self.checker()
+        self.token_list = tokenize_expression(self.expression)
 
     def checker(self):
         """
@@ -41,37 +51,23 @@ class ADLib:
             raise SyntaxError('!!! Error: Number of right and left parenthesis do not match')
 
         # Check if there are unrecognized operations
-        checking = self.expression.replace('(', ' ')
-        checking = checking.replace(')', ' ')
-        checking = checking.replace(',', ' ')
+        checking = tokenize_expression(self.expression)
 
-        allowed_tokens = self.op_list + self.symbol_list + ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.']
+        allowed_tokens = self.op_list + self.symbol_list
 
-        for token in allowed_tokens:
-            checking = checking.replace(token, '')
-
-        unrecognized = checking.split(' ')
-        checking = checking.replace(' ', '')
-
-        if len(checking) > 0:
-            misses = ''
-            for token in unrecognized:
-                if len(token) > 0:
-                    misses += ', ' + token
-            raise SyntaxError('!!! Error: Unexpected token(s) in expression:' + misses)
+        for token in checking:
+            if not token in allowed_tokens:
+                try:
+                    if float(token):  # fixme this is a hack to check if it is a number
+                        pass
+                except:
+                    raise SyntaxError('!!! Error: Unexpected token(s) in expression.')
 
     def eval(self, get_gradients=False):
         """
         parses an expression string into an evaluation tree
         :return: function for evaluation
         """
-        remaining = self.expression.replace('(', '#')
-        remaining = remaining.replace(',', '#')
-        remaining = remaining.replace(')', '#')
-        remaining = remaining.replace(' ', '')
-        remaining = remaining.replace('##', '#')
-        self.token_list = list(filter(None, remaining.split('#')))  # remove empty strings
-        # The node id is given by the position it occupied in the original token list
 
         stack = list()
         args_left = list()
@@ -80,7 +76,7 @@ class ADLib:
         uid_number = 0  # internal name for variables to avoid collision when computing gradients
 
         if get_gradients:
-            grad_dict = dict((var, []) for var in self.symbol_dict.keys())
+            grad_dict = dict((var, []) for var in self.grad_vars)
 
         while self.token_list:  # here we will build a n-ary tree with traversal using a stack (and not recursion)
 
@@ -88,7 +84,7 @@ class ADLib:
 
             # Evaluate token
             if token in self.op_list:  # Valid operation - In this case the node will have children
-                node = eval(token.capitalize() + '()')
+                node = eval(token + '()')
                 stack.append(node)
                 args_left.append(node.n_args)
                 parent_node = node
@@ -109,7 +105,8 @@ class ADLib:
                 else:
                     # And the next point is also necessarily a constant
                     node = Constant(str2num(token))
-                    grad_dict[uid] = node.grad(node.arg_list)
+                    if get_gradients:
+                        grad_dict[uid] = node.grad(node.arg_list)
 
                 if len(stack) == 0:
                     # This is the case when there is only a single entry which is a variable or a token
@@ -198,8 +195,6 @@ class FunctionNode:
         n_args: number of arguments the function takes
         arg_list: list of arguments that the function takes
         """
-        self.func = None
-        self.grad = None
         self.n_args = 0
         self.children = list()
         self.arg_list = list()
@@ -235,8 +230,14 @@ class Add(FunctionNode):
         self.n_args = 2
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x: x[0] + x[1]
-        self.grad = lambda x: [np.ones_like(x[0]), np.ones_like(x[1])]
+
+    @staticmethod
+    def func(x):
+        return x[0] + x[1]
+
+    @staticmethod
+    def grad(x):
+        return [np.ones_like(x[0]), np.ones_like(x[1])]
 
 
 class Sub(FunctionNode):
@@ -248,9 +249,15 @@ class Sub(FunctionNode):
         FunctionNode.__init__(self)
         self.n_args = 2
         self.arg_list = [None] * self.n_args
-        self.children = [None] * self.n_args
-        self.func = lambda x: x[0] + x[1]
-        self.grad = lambda x: [np.ones_like(x[0]), -np.ones_like(x[1])]
+        self.children = [[None]] * self.n_args
+
+    @staticmethod
+    def func(x):
+        return x[0] - x[1]
+
+    @staticmethod
+    def grad(x):
+        return [np.ones_like(x[0]), -np.ones_like(x[1])]
 
 
 class Mult(FunctionNode):
@@ -263,8 +270,14 @@ class Mult(FunctionNode):
         self.n_args = 2
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x: x[0] * x[1]
-        self.grad = lambda x: [x[1], x[0]]
+
+    @staticmethod
+    def func(x):
+        return x[0] * x[1]
+
+    @staticmethod
+    def grad(x):
+        return [x[1], x[0]]
 
 
 class Div(FunctionNode):
@@ -277,8 +290,14 @@ class Div(FunctionNode):
         self.n_args = 2
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x: x[0] / x[1]
-        self.grad = lambda x: [1 / x[1], - x[0] / (x[1] ** 2)]
+
+    @staticmethod
+    def func(x):
+        return x[0] / x[1]
+
+    @staticmethod
+    def grad(x):
+        return [1 / x[1], - x[0] / (x[1] ** 2)]
 
 
 class Pow(FunctionNode):
@@ -291,8 +310,14 @@ class Pow(FunctionNode):
         self.n_args = 2
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x: x[0] ** x[1]
-        self.grad = lambda x: [x[1] * x[0] ** (x[1] - 1), x[0] ** x[1] * np.log(x[0])]
+
+    @staticmethod
+    def func(x):
+        return x[0] ** x[1]
+
+    @staticmethod
+    def grad(x):
+        return [x[1] * x[0] ** (x[1] - 1), x[0] ** x[1] * np.log(x[0])]
 
 
 class Sin(FunctionNode):
@@ -305,8 +330,14 @@ class Sin(FunctionNode):
         self.n_args = 1
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x: np.sin(x)
-        self.grad = lambda x: [np.cos(x)]
+
+    @staticmethod
+    def func(x):
+        return np.sin(x)
+
+    @staticmethod
+    def grad(x):
+        return [np.cos(x)]
 
 
 class Cos(FunctionNode):
@@ -319,8 +350,14 @@ class Cos(FunctionNode):
         self.n_args = 1
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x: np.cos(x)
-        self.grad = lambda x: [-np.sin(x)]
+
+    @staticmethod
+    def func(x):
+        return np.cos(x)
+
+    @staticmethod
+    def grad(x):
+        return [-np.sin(x)]
 
 
 class Dot(FunctionNode):
@@ -333,8 +370,14 @@ class Dot(FunctionNode):
         self.n_args = 2
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x: np.dot(x[0], x[1])
-        self.grad = lambda x: [x[1].T, x[0].T]
+
+    @staticmethod
+    def func(x):
+        return np.dot(x[0], x[1])
+
+    @staticmethod
+    def grad(x):
+        return [x[1].T, x[0].T]
 
 
 class LogLikeGaussian(FunctionNode):
@@ -347,10 +390,16 @@ class LogLikeGaussian(FunctionNode):
         self.n_args = 3
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x, mu, s2: - 0.5 * (np.log(2. * np.pi) + np.log(s2) + 1 / s2 * (x - mu) ** 2)
-        self.grad = lambda x, mu, s2: [- 1. / s2 * (x - mu),
-                                       1. / s2 * (x - mu),
-                                       - 0.5 * (1 / s2 + 1 / (s2 ** 2) * (x - mu) ** 2)]
+
+    @staticmethod
+    def func(x):
+        return - 0.5 * (np.log(2. * np.pi * x[2]) + (x[0] - x[1]) ** 2 / x[2])
+
+    @staticmethod
+    def grad(x):
+        return [- (x[0] - x[1]) / x[2],
+                + (x[0] - x[1]) / x[2],
+                - 0.5 * (1 / x[2] + 1 / (x[2] ** 2) * (x[0] - x[1]) ** 2)]
 
 
 class LogLikeExponential(FunctionNode):
@@ -363,9 +412,15 @@ class LogLikeExponential(FunctionNode):
         self.n_args = 2
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x, ell: np.log(ell) + ell * x
-        self.grad = lambda x, ell: [ell,
-                                    1. / ell + x]
+
+    @staticmethod
+    def func(x):
+        return np.log(x[1]) + x[1] * x[0]
+
+    @staticmethod
+    def grad(x):
+        return [x[1],
+                1. / x[1] + x[0]]
 
 
 class LogLikeGamma(FunctionNode):
@@ -378,10 +433,16 @@ class LogLikeGamma(FunctionNode):
         self.n_args = 3
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x, a, b: a * np.log(b) + (a - 1.) * np.log(x) - x * b - sps.gammaln(a)
-        self.grad = lambda x, a, b: [(a - 1.) / x - b,
-                                     np.log(b) + np.log(x) - sps.polygamma(0, a),
-                                     a / b - x]
+
+    @staticmethod
+    def func(x):
+        return x[1] * np.log(x[2]) + (x[1] - 1.) * np.log(x[0]) - x[0] * x[2] - sps.gammaln(x[1])
+
+    @staticmethod
+    def grad(x):
+        return [(x[1] - 1.) / x[0] - x[2],
+                np.log(x[2]) + np.log(x[0]) - sps.polygamma(0, x[1]),
+                x[1] / x[2] - x[0]]
 
 
 class LogLikeInvGamma(FunctionNode):
@@ -394,10 +455,16 @@ class LogLikeInvGamma(FunctionNode):
         self.n_args = 3
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x, a, b: a * np.log(b) - (a + 1.) * np.log(x) - b / x - sps.gammaln(a)
-        self.grad = lambda x, a, b: [- (a + 1.) / x + b / (x ** 2),
-                                     np.log(b) - np.log(x) - sps.polygamma(0, a),
-                                     a / b - 1. / x]
+
+    @staticmethod
+    def func(x):
+        return x[1] * np.log(x[2]) - (x[1] + 1.) * np.log(x[0]) - x[2] / x[0] - sps.gammaln(x[1])
+
+    @staticmethod
+    def grad(x):
+        return [- (x[1] + 1.) / x[0] + x[2] / (x[0] ** 2),
+                np.log(x[2]) - np.log(x[1]) - sps.polygamma(0, x[1]),
+                x[1] / x[2] - 1. / x[0]]
 
 
 class LogLikeBeta(FunctionNode):
@@ -410,7 +477,13 @@ class LogLikeBeta(FunctionNode):
         self.n_args = 3
         self.arg_list = [None] * self.n_args
         self.children = [[None]] * self.n_args
-        self.func = lambda x, a, b: (a - 1.) * np.log(x) + (b - 1.) * np.log(1. - x) - sps.betaln(a, b)
-        self.grad = lambda x, a, b: [(a - 1.) / x - (b - 1.) / (1. - x),
-                                     np.log(x) - sps.polygamma(0, a) + sps.polygamma(0, a + b),
-                                     np.log(1. - x) - sps.polygamma(0, b) + sps.polygamma(0, a + b)]
+
+    @staticmethod
+    def func(x):
+        return (x[1] - 1.) * np.log(x[0]) + (x[2] - 1.) * np.log(1. - x[0]) - sps.betaln(x[1], x[2])
+
+    @staticmethod
+    def grad(x):
+        return [(x[1] - 1.) / x[0] - (x[2] - 1.) / (1. - x[0]),
+                np.log(x[0]) - sps.polygamma(0, x[1]) + sps.polygamma(0, x[1] + x[2]),
+                np.log(1. - x[0]) - sps.polygamma(0, x[2]) + sps.polygamma(0, x[1] + x[2])]

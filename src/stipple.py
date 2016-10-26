@@ -31,24 +31,58 @@ class Stipple(object):
         self._input_list = list()
         self._output_list = list()
         self._var_list = list()
-        self.N = 0
+        self.results = dict()
 
-    @staticmethod
-    def _check_character(char, name, parameters):
+        self._invalid_chars = ['#', '!', '@', '$']
+        self._reserved_names = distrib.availableDists + adlib.op_list
+
+    def __has_invalid_character(self, var_name):
         """
-        checks if character is not in the name or parameter string (if it is, throw an error)
-        :param char:
-        :param name:
-        :param parameters:
+        checks if an invalid character is in var_name
+        :param var_name:
         :return:
         """
-        if char in name:
-            raise NameError('Invalid character in the variable name: ' + name)
+        for item in self._invalid_chars:
+            if item in var_name:
+                return True
 
-        # Make sure people don't include # within the name of parameters
-        for item in parameters.keys():
-            if char in item:
-                raise NameError('Invalid character in the variable parameters: ' + item)
+        return False
+
+    def __is_reserved_name(self, var_name):
+        """
+        checks if the var_name is in the reserved names list
+        :param var_name:
+        :return:
+        """
+        for item in self._reserved_names:
+            if item == var_name:
+                return True
+
+        return False
+
+    def __is_already_defined(self, var_name):
+        """
+        checks if the var_name is in the reserved names list
+        :param var_name:
+        :return:
+        """
+        for item in self._namespace.keys():
+            if item == var_name:
+                return True
+
+        return False
+
+    def _check_variable_declaration(self, var_name):
+        """
+        checks if the variable declaration is valid
+        :return:
+        """
+        if self.__has_invalid_character(var_name):
+            raise NameError('Variable name contains invalid character: ' + var_name)
+        if self.__is_reserved_name(var_name):
+            raise NameError('Variable name reserved for operation:' + var_name)
+        if self.__is_already_defined(var_name):
+            raise NameError('Variable already defined: ' + var_name)
 
     def assume(self, distribution, name, parameters):
         """
@@ -60,13 +94,8 @@ class Stipple(object):
         """
 
         # INPUT CHECKING
-        # Make sure people don't include # within the name of variables
-        self._check_character('#', name, parameters)
-        self._check_character('!', name, parameters)
-
-        # Namespace checking to see if symbol already defined
-        if name in self._namespace:
-            raise NameError('Variable name already defined: ' + name)
+        # Make sure people variable name follows conventions and is not already defined
+        self._check_variable_declaration(name)
 
         # PARSING
         # Switch-case for available distributions in the language
@@ -75,16 +104,26 @@ class Stipple(object):
 
     def disregard(self, name):
         """
-        removes a variable from the namespace and stack
+        removes a variable from the namespace and other internal control lists
         :param name: name of the variable to be removed
         :return:
         """
-        # remove from namespace
-        if not ('!' in name) and self.N > 0:
-            self.N -= 1
-
         del self._namespace[name]
-        # fixme: remove from variable, input and output lists
+
+        for ii in xrange(0, len(self._var_list)):
+            if name == self._var_list[ii]:
+                del self._var_list[ii]
+                break
+
+        for ii in xrange(0, len(self._input_list)):
+            if name == self._input_list[ii]:
+                del self._input_list[ii]
+                break
+
+        for ii in xrange(0, len(self._output_list)):
+            if name == self._output_list[ii]:
+                del self._output_list[ii]
+                break
 
     def observe(self, name, data):
         """
@@ -93,9 +132,9 @@ class Stipple(object):
         :param data: observed data points
         :return:
         """
-        if name in self._namespace:
-            self._namespace[name]['data'] = data
+        if name in self._namespace:  # variable needs to be declared beforehand
             self._output_list.append(name)
+            self._namespace[name]['data'] = data
         else:
             raise NameError('Variable not declared: ' + name)
 
@@ -106,21 +145,13 @@ class Stipple(object):
         :param data:
         :return:
         """
-        self._check_character('#', name, {})
-        self._check_character('!', name, {})
-
-        # Namespace checking to see if symbol already defined
-        if name in self._namespace:
-            raise NameError('Variable name already defined: ' + name)
+        # INPUT CHECKING
+        # Make sure people variable name follows conventions and is not already defined
+        self._check_variable_declaration(name)
 
         # PARSING
         # Switch-case for available distributions in the language
-        new_node = {
-            'distr': 'Identity',
-            'param': data,  # fixme: multiple inputs
-            'data': data
-        }
-        self._namespace[name] = new_node
+        self._namespace[name] = distrib.CreateNode('point', parameters=data, data=data)
         self._input_list.append(name)
 
     def infer(self, method='hmc'):
@@ -133,19 +164,31 @@ class Stipple(object):
             # Method selector
 
             if method == 'hmc':
+
                 expression = self._parse_hmc_energy()
+                symbols = self._get_hmc_symbol_lookup()
                 options = {
-                    'n_samples': 5000,
-                    'E': lambda x: self._hmc_energy(x, expression),
-                    'dE': lambda x: self._hmc_energy_grad(x, expression),
-                    'N': self.N,
+                    'n_samples': 100,
+                    'E': lambda x: self._hmc_energy(x, expression, symbols),
+                    'dE': lambda x: self._hmc_energy_grad(x, expression, symbols),
+                    'N': len(self._var_list),
                     'max tune iter': 0,
-                    'max rejections': 5000
+                    'max rejections': 100
                 }
 
                 hmc_sampler = hmc.HMC(options=options)
                 samples = hmc_sampler.run()
-                return samples
+
+                for ii in xrange(0, len(self._var_list)):
+                    name = self._var_list[ii]
+                    self._namespace[name]['data'] = samples[:, ii]
+                    self.results[name] = {
+                        'mean': np.mean(samples[:, ii]),
+                        'var': np.var(samples[:, ii])
+                    }
+
+            elif method == 'abc':
+                raise NotImplementedError('')
 
             elif method == 'vi':
                 raise NotImplementedError('')
@@ -165,68 +208,90 @@ class Stipple(object):
         :return:
         """
         # fixme: this parsing scheme will result in an imbalanced tree. Divide it into a binary balanced tree.
-        # fixme: have to add a substitute for multiple data points
         expression = ''
+        suffix = ')'
+
         for idx in xrange(0, len(self._var_list)):
 
             var = self._var_list[idx]
-            param = self._namespace[var]['param']
+            var_dist = self._namespace[var]['distr']
 
             arg_list = list()
-            arg_list.append([var])
+            arg_list.append(var)
 
-            max_length = 1
-            if not param[0] is None:
-                for entry in param:
-                    if entry in self._input_list:
-                        arg_list.append(self._namespace[entry]['data'])
-                        if np.size(self._namespace[entry]['data']) > max_length:
-                            max_length = np.size(self._namespace[entry]['data'])
-                    else:
-                        arg_list.append([str(entry)])
+            # exclude cases where the variable symbol will be substituted for a constant
+            if not (var_dist == 'Constant' or var_dist == 'Identity'):
 
-                if max_length > 1:
-                    for ii in xrange(0, len(arg_list)):
-                        if np.size(arg_list[0][ii]) == 1:
-                            arg_list[0][ii] = arg_list[0][ii] * max_length
-                            # fixme: what about the case where there are differing numbers of datapoints?
+                # convert parameters to strings
+                for entry in self._namespace[var]['param']:
+                    arg_list.append(str(entry))
 
-                # Transpose argument list
-                arg_list = zip(*arg_list)
-                for ii in xrange(0, max_length):
-                    args = ",".join(arg_list[ii])
-                    if expression == '':
-                        expression = 'add(' + self._namespace[var]['distr'] + '(' + args + '),'
-                        suffix = ')'
-                    else:
-                        expression += 'add(' + self._namespace[var]['distr'] + '(' + args + '),'
-                        suffix += ')'
+                # Parse all arguments together
+                args = ",".join(arg_list)
+
+                if expression == '':
+                    expression = 'Add(' + var_dist + '(' + args + '),'
+                else:
+                    expression += 'Add(' + var_dist + '(' + args + '),'
+                    suffix += ')'
 
         return expression + '0.' + suffix  # fixme: this is a hack. substitute this
 
-    def _hmc_energy(self, x, expression):
+    def _get_hmc_symbol_lookup(self):
+        """
+        gets the symbol lookup dictionary for the hmc module
+        :return:
+        """
+        # Create symbol lookup dictionary for adlib internal reference
+        symbols = dict()
+        for key in self._output_list:
+            symbols[key] = self._namespace[key]['data']
+        for key in self._input_list:
+            symbols[key] = self._namespace[key]['data']
+
+        # remove inputs and outputs from internal model structure
+        ii = 0
+        while ii < len(self._var_list):
+            if (self._var_list[ii] in self._input_list) or (self._var_list[ii] in self._output_list):
+                del self._var_list[ii]
+            ii += 1
+
+        return symbols
+
+    def _hmc_energy(self, x, expression, symbols):
         """
         energy function of the hamiltonian monte-carlo
         :param x: input where the energy is evaluated at
         :param expression: expression string
+        :param symbols: symbol dictionary for ADlib lookup
         :return:
         """
-        symbols = dict()
+        # Add items to the dictionary locally
         for ii in xrange(0, len(self._var_list)):
-            symbols[self._var_list[ii]] = str(x[ii])
+            symbols[self._var_list[ii]] = x[ii]
 
         ad = adlib.ADLib(expression=expression, symbol_dict=symbols)
         return ad.eval()
 
-    def _hmc_energy_grad(self, x, expression):
+    def _hmc_energy_grad(self, x, expression, symbols):
         """
         gradient of the energy function of the hamiltonian monte-carlo
         :param x: input where the gradient must be evaluated at
         :param expression: expression string
+        :param symbols: symbol dictionary for ADlib lookup
         :return:
         """
-        symbols = dict()
+        # Add items to the dictionary locally
         for ii in xrange(0, len(self._var_list)):
-            symbols[self._var_list[ii]] = str(x[ii])
+            symbols[self._var_list[ii]] = x[ii]
+
+        # ad = adlib.ADLib(expression=expression, symbol_dict=symbols, grad_vars=self._var_list)
         ad = adlib.ADLib(expression=expression, symbol_dict=symbols)
-        return ad.eval(get_gradients=True)
+        f_val, grad_dict = ad.eval(get_gradients=True)
+
+        # Get values in the right order from the dictionary:
+        dx = np.zeros_like(x)
+        for ii in xrange(0, len(self._var_list)):
+            dx[ii] = grad_dict[self._var_list[ii]]
+
+        return dx

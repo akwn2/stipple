@@ -4,7 +4,9 @@ Implements the Hamiltonian Monte Carlo Inference algorithm
 """
 import numpy as np
 import util.linalg as la
-import pybo
+
+
+# import pybo
 
 
 class HMC:
@@ -26,17 +28,17 @@ class HMC:
         if 'steps' in options.keys():  # Number of St\"{o}rmer-Verlet steps
             self.sv_steps = options['steps']
         else:
-            self.sv_steps = 100  # Number of St\"{o}rmer-Verlet steps
+            self.sv_steps = 20  # Number of St\"{o}rmer-Verlet steps
 
         if 'step size' in options.keys():  # Number of St\"{o}rmer-Verlet steps
             self.step_size = options['step size']
         else:
-            self.step_size = 0.1  # Step size to be used in the integration
+            self.step_size = 0.015  # Step size to be used in the integration
 
         if 'xin' in options.keys():  # Number of St\"{o}rmer-Verlet steps
             self.xin = options['xin']
         else:
-            self.xin = np.zeros([self.n_states, 1])
+            self.xin = np.ones([self.n_states, 1])
 
         # Tuner options
         self.max_tune_iter = options['max tune iter']
@@ -69,7 +71,7 @@ class HMC:
             h_new_xv = self.__hamiltonian(x, v)  # Get new value for Hamiltonian
 
             h_diff = h_new_xv - h_xv  # Analyse whether sample should be accepted
-            if (h_diff < 0) or (np.log(np.random.rand(1, 1)) < -h_diff):
+            if (not np.isnan(h_diff)) and ((h_diff < 0) or (np.log(np.random.rand(1, 1)) < -h_diff)):
                 samples[accepted, :] = x.T
                 x0 = x  # Update initial state
                 accepted += 1
@@ -81,6 +83,7 @@ class HMC:
             print('!!! Warning: Maximum rejections reached. Total samples obtained: ' + str(accepted))
             return samples[0:accepted, :]
         else:
+            print
             return samples
 
     def __hamiltonian(self, x, v):
@@ -131,35 +134,29 @@ class HMC:
         Tuning by Bayesian Optimisation
         :return:
         """
-        bounds = np.zeros([self.n_params, 2])
-        bounds[:, 1] = 1E6  # Right bound = +infty
-
-        xbest, model, info = pybo.solve_bayesopt(objective=lambda x: self.__hmc_wrapper(x),
-                                                 bounds=bounds,
-                                                 niter=self.max_tune_iter,
-                                                 verbose=True)
-
-        # Unpack learned parameters
-        xbest = np.exp(xbest)
-        self.inv_mat_m = np.diag(xbest[0:self.n_params])
-        self.sv_steps = np.floor(xbest[self.n_states: self.n_states + 1])
-        self.step_size = xbest[-1]
+        # bounds = np.zeros([self.n_params, 2])
+        # bounds[:, 1] = 1E6  # Right bound = +infty
+        #
+        # xbest, model, info = pybo.solve_bayesopt(objective=lambda x: self.__hmc_wrapper(x),
+        #                                          bounds=bounds,
+        #                                          niter=self.max_tune_iter,
+        #                                          verbose=True)
+        #
+        # # Unpack learned parameters
+        # xbest = np.exp(xbest)
+        # self.inv_mat_m = np.diag(xbest[0:self.n_params])
+        # self.sv_steps = np.floor(xbest[self.n_states: self.n_states + 1])
+        # self.step_size = xbest[-1]
 
     def run(self):
         """
         Tunes and runs the HMC sampler
         :return:
         """
-        self.tune()
+        if self.max_tune_iter > 0:
+            self.tune()
 
         samples = self.hmc()
-
-        # Discard samples in burn in period
-
-        # Thin the samples by retaining only the least correlated ones
-        ess_step = np.min(ess(samples))
-        samples = samples[0:ess_step:]
-
         return samples
 
 
