@@ -21,31 +21,31 @@ def CreateNode(distribution, parameters, data=None):
     elif distribution is 'normal':
         new_node = {
             'distr': 'LogLikeGaussian',
-            'param': [parameters['mu'], parameters['s2']],
+            'param': [str(parameters['mu']), str(parameters['s2'])],
             'data': data
         }
     elif distribution is 'exponential':
         new_node = {
             'distr': 'LogLikeExponential',
-            'param': [parameters['lambda']],
+            'param': [str(parameters['lambda'])],
             'data': data
         }
     elif distribution is 'gamma':
         new_node = {
             'distr': 'LogLikeGamma',
-            'param': [parameters['alpha'], parameters['beta']],
+            'param': [str(parameters['alpha']), str(parameters['beta'])],
             'data': data
         }
     elif distribution is 'inverse_gamma':
         new_node = {
             'distr': 'LogLikeInvGamma',
-            'param': [parameters['alpha'], parameters['beta']],
+            'param': [str(parameters['alpha']), str(parameters['beta'])],
             'data': data
         }
     elif distribution is 'beta':
         new_node = {
             'distr': 'LogLikeBeta',
-            'param': [parameters['alpha'], parameters['beta']],
+            'param': [str(parameters['alpha']), str(parameters['beta'])],
             'data': data
         }
     else:

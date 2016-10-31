@@ -12,9 +12,50 @@ class TestStipple(TestCase):
         expression = 'Add(Mult(c, x), f)'
         model.assume('normal', 'y', {'mu': expression, 's2': 1.0})
         model.observe('y', np.array([0, 1]))
-        xp = model._parse_hmc_energy()
+        xp = model._parse_hmc_energy_adlib()
 
         assert xp == 'Add(LogLikeGaussian(f,0.2,10.0),Add(LogLikeGaussian(y,Add(Mult(c, x), f),1.0),0.))'
+
+    def test__parse_hmc_energy_ag(self):
+        # Parsing test without substituting for inputs and outputs
+        s2_c = 5.
+        mu_c = 0.1
+        s2_f = 10.
+        mu_f = 15.0
+        s2_y = 1.0
+        x = np.array([0.9, 0.2])
+        y = np.array([0., 1.])
+
+        model = Stipple()
+        model.input('x', x)
+        model.assume('normal', 'c', {'mu': mu_c, 's2': s2_c})
+        model.assume('normal', 'f', {'mu': mu_f, 's2': s2_f})
+        model.assume('normal', 'y', {'mu': 'Add(Mult(c, x), f)', 's2': s2_y})
+        model.observe('y', y)
+        calcf = model._parse_hmc_energy_ag()
+
+        def gtf(xin):
+
+            c = xin[0]
+            f = xin[1]
+
+            pri = - 0.5 * ag.np.log(2. * np.pi * s2_f) - 0.5 * (f - mu_f) ** 2 / s2_f \
+                  - 0.5 * ag.np.log(2. * np.pi * s2_c) - 0.5 * (c - mu_c) ** 2 / s2_c
+
+            lik = - 0.5 * ag.np.log(2. * np.pi * s2_y) - 0.5 * ag.np.dot((y - (c * x + f)).T, (y - (c * x + f))) / s2_y
+
+            return ag.np.sum(pri + lik)
+
+        xin = np.array([0.1, 0.3])
+        fx = calcf(xin)
+        grad_f = ag.grad(calcf)
+        grad_fx = grad_f(xin)
+
+        gtx = gtf(xin)
+        grad_gt = ag.grad(gtf)
+        grad_gtx = grad_gt(xin)
+        np.testing.assert_almost_equal(fx, gtx)
+        np.testing.assert_almost_equal(grad_fx, grad_gtx)
 
     def test__hmc_energy(self):
         # Parsing test without substituting for inputs and outputs
@@ -44,7 +85,7 @@ class TestStipple(TestCase):
         model.assume('normal', 'g', {'mu': mu_g, 's2': s2_g})
         model.assume('normal', 'y', {'mu': 'Add(Mult(g, Mult(c, x)), f)', 's2': s2_y})
         model.observe('y', y)
-        expr = model._parse_hmc_energy()
+        expr = model._parse_hmc_energy_adlib()
         symbols = model._get_hmc_symbol_lookup()
 
         def energy_calc(xin):
@@ -85,7 +126,7 @@ class TestStipple(TestCase):
         model.assume('normal', 'g', {'mu': mu_g, 's2': s2_g})
         model.assume('normal', 'y', {'mu': 'Add(Mult(g, Mult(c, x)), f)', 's2': s2_y})
         model.observe('y', y)
-        expr = model._parse_hmc_energy()
+        expr = model._parse_hmc_energy_adlib()
         symbols = model._get_hmc_symbol_lookup()
 
         def grad_energy_calc(xin):
@@ -98,14 +139,14 @@ class TestStipple(TestCase):
 
     def test__gaussian_example(self):
         # inputs
-        x = np.array([0.9])
+        x = np.array([0.9, 1.0])
         c = 0.1
         mu_f = 0.2
         s2_f = 10.
         mu_g = 0.3
         s2_g = 5.
         s2_y = 1.0
-        y = np.array([0.0])
+        y = np.array([0.0, 2.0])
 
         # modelling
         model = Stipple()

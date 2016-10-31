@@ -28,12 +28,12 @@ class HMC:
         if 'steps' in options.keys():  # Number of St\"{o}rmer-Verlet steps
             self.sv_steps = options['steps']
         else:
-            self.sv_steps = 20  # Number of St\"{o}rmer-Verlet steps
+            self.sv_steps = 10  # Number of St\"{o}rmer-Verlet steps
 
         if 'step size' in options.keys():  # Number of St\"{o}rmer-Verlet steps
             self.step_size = options['step size']
         else:
-            self.step_size = 0.015  # Step size to be used in the integration
+            self.step_size = 0.0001  # Step size to be used in the integration
 
         if 'xin' in options.keys():  # Number of St\"{o}rmer-Verlet steps
             self.xin = options['xin']
