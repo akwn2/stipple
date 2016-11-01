@@ -28,7 +28,7 @@ class HMC:
         if 'steps' in options.keys():  # Number of St\"{o}rmer-Verlet steps
             self.sv_steps = options['steps']
         else:
-            self.sv_steps = 10  # Number of St\"{o}rmer-Verlet steps
+            self.sv_steps = 5  # Number of St\"{o}rmer-Verlet steps
 
         if 'step size' in options.keys():  # Number of St\"{o}rmer-Verlet steps
             self.step_size = options['step size']

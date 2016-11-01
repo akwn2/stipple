@@ -18,6 +18,12 @@ def CreateNode(distribution, parameters, data=None):
             'param': parameters,
             'data': data
         }
+    elif distribution is 'bernoulli':  # This is an exceptional case, watch out
+        new_node = {
+            'distr': 'LogLikeBernoulli',
+            'param': [str(parameters['theta'])],
+            'data': data
+        }
     elif distribution is 'normal':
         new_node = {
             'distr': 'LogLikeGaussian',

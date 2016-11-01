@@ -8,7 +8,7 @@ import autograd.numpy as np
 import autograd.scipy.special as sps
 from autograd import grad
 
-op_list = ['Add', 'Sub', 'Mult', 'Div', 'Pow', 'Sin', 'Cos', 'Dot', 'Sum',
+op_list = ['Add', 'Sub', 'Mult', 'Div', 'Pow', 'Sin', 'Cos', 'Dot', 'Sum', 'Sigmoid',
            'LogLikGaussian', 'LogLikExponential', 'LogLikGamma','LogLikInvGamma', 'LogLikBeta']
 
 
@@ -74,6 +74,19 @@ def Dot(x, y):
     """
     return np.dot(x, y)
 
+
+def Sigmoid(x):
+    """
+    Sigmoid function
+    """
+    return 1. / (1. + np.exp(-x))
+
+
+def LogLikeBernoulli(x, theta):
+    """
+    log-likelihood for bernoulli distribution
+    """
+    return np.sum(x * np.log(theta) + (1 - x) * np.log(1 - theta))
 
 def LogLikeGaussian(x, mu, s2):
     """
